@@ -1,0 +1,14 @@
+{
+    "rss_url": "https://rss.ovh/telegram/channel/ZaihuaNews",
+    "discord_webhook_url": "YOUR_DISCORD_WEBHOOK_URL_HERE",
+    "check_interval": 600,
+    "log_level": "INFO",
+    "max_retries": 3,
+    "timeout": 30,
+    "url_shortener": {
+        "enabled": true,
+        "domain": "http://localhost:8080",
+        "host": "localhost",
+        "port": 8080
+    }
+}
