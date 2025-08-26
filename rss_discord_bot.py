@@ -11,6 +11,7 @@ import os
 import time
 import hashlib
 import re
+import base64
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
@@ -161,11 +162,20 @@ class RSSDiscordBot:
             item: RSS文章项目
             
         Returns:
-            文章的唯一标识符
+            文章的唯一标识符（基于链接的base64编码）
         """
-        # 使用链接和标题生成唯一ID
-        content = f"{item.get('link', '')}{item.get('title', '')}"
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
+        # 使用链接的base64编码作为唯一ID
+        link = item.get('link', '')
+        if not link:
+            # 如果没有链接，回退到使用标题
+            title = item.get('title', '')
+            link = title
+        
+        # 将链接编码为base64
+        link_bytes = link.encode('utf-8')
+        base64_id = base64.b64encode(link_bytes).decode('ascii')
+        
+        return base64_id
     
     def _extract_media_urls(self, html_content: str) -> List[str]:
         """从HTML内容中提取媒体文件URL
