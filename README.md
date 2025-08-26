@@ -42,6 +42,9 @@ pip install -r requirements.txt
     "log_level": "INFO",
     "max_retries": 3,
     "timeout": 30,
+    "filter_keywords": [
+        "开奖完成通知"
+    ],
     "url_shortener": {
         "enabled": true,
         "domain": "http://localhost:8080",
@@ -58,6 +61,7 @@ pip install -r requirements.txt
 - `log_level`: 日志级别（DEBUG, INFO, WARNING, ERROR）
 - `max_retries`: 发送失败时的最大重试次数
 - `timeout`: 网络请求超时时间（秒）
+- `filter_keywords`: 关键词过滤列表，包含任一关键词的文章将被忽略
 - `url_shortener`: 短链接服务配置
   - `enabled`: 是否启用短链接服务
   - `domain`: 短链接域名（可配置为公网域名）
