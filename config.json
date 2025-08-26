@@ -5,6 +5,9 @@
     "log_level": "INFO",
     "max_retries": 3,
     "timeout": 30,
+    "filter_keywords": [
+        "开奖完成通知"
+    ],
     "url_shortener": {
         "enabled": true,
         "domain": "http://localhost:8080",

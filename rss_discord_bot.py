@@ -177,6 +177,33 @@ class RSSDiscordBot:
         
         return base64_id
     
+    def _should_filter_item(self, item: Dict) -> bool:
+        """检查文章是否应该被过滤
+        
+        Args:
+            item: RSS文章项目
+            
+        Returns:
+            如果应该过滤返回True，否则返回False
+        """
+        filter_keywords = self.config.get('filter_keywords', [])
+        if not filter_keywords:
+            return False
+        
+        title = item.get('title', '').lower()
+        summary = item.get('summary', '').lower()
+        description = item.get('description', '').lower()
+        
+        # 检查标题、摘要和描述中是否包含过滤关键词
+        content_to_check = f"{title} {summary} {description}"
+        
+        for keyword in filter_keywords:
+            if keyword.lower() in content_to_check:
+                self.logger.info(f"文章被过滤 - 包含关键词 '{keyword}': {item.get('title', '无标题')}")
+                return True
+        
+        return False
+    
     def _extract_media_urls(self, html_content: str) -> List[str]:
         """从HTML内容中提取媒体文件URL
         
@@ -495,6 +522,12 @@ class RSSDiscordBot:
             if item_id in self.sent_items:
                 continue
             
+            # 检查是否包含过滤关键词
+            if self._should_filter_item(item):
+                # 即使被过滤，也要记录到已发送列表中，避免重复检查
+                self.sent_items.add(item_id)
+                continue
+            
             # 格式化消息
             message_data = self.format_message(item)
             
@@ -553,6 +586,13 @@ class RSSDiscordBot:
         self.logger.info("RSS Discord推送机器人启动")
         self.logger.info(f"RSS源: {self.config['rss_url']}")
         self.logger.info(f"检查间隔: {self.config.get('check_interval', 600)} 秒")
+        
+        # 显示过滤关键词信息
+        filter_keywords = self.config.get('filter_keywords', [])
+        if filter_keywords:
+            self.logger.info(f"关键词过滤已启用，过滤词汇: {', '.join(filter_keywords)}")
+        else:
+            self.logger.info("关键词过滤已禁用")
         
         # 设置定时任务
         check_interval = self.config.get('check_interval', 600)
