@@ -36,6 +36,9 @@ class RSSDiscordBot:
         self.sent_items = self._load_sent_items()
         self._setup_logging()
         
+        # 设置代理
+        self.proxies = self._setup_proxy()
+        
         # 初始化短链接服务器
         self.url_shortener = None
         self._setup_url_shortener()
@@ -80,6 +83,45 @@ class RSSDiscordBot:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             self.logger.error(f"保存已发送项目记录失败: {e}")
+    
+    def _setup_proxy(self) -> Dict:
+        """设置代理配置
+        
+        Returns:
+            代理字典，用于requests库
+        """
+        proxy_config = self.config.get('proxy', {})
+        
+        if not proxy_config.get('enabled', False):
+            return {}
+        
+        proxies = {}
+        
+        # 基本代理设置
+        if proxy_config.get('http'):
+            proxies['http'] = proxy_config['http']
+        if proxy_config.get('https'):
+            proxies['https'] = proxy_config['https']
+        
+        # 处理代理认证
+        auth_config = proxy_config.get('auth', {})
+        if auth_config.get('enabled', False):
+            username = auth_config.get('username', '')
+            password = auth_config.get('password', '')
+            
+            if username and password:
+                # 更新代理URL以包含认证信息
+                for protocol in ['http', 'https']:
+                    if protocol in proxies:
+                        proxy_url = proxies[protocol]
+                        if '://' in proxy_url:
+                            scheme, rest = proxy_url.split('://', 1)
+                            proxies[protocol] = f"{scheme}://{username}:{password}@{rest}"
+        
+        if proxies:
+            self.logger.info(f"代理已启用: {', '.join(proxies.keys())}")
+        
+        return proxies
     
     def _setup_logging(self):
         """设置日志"""
@@ -297,7 +339,12 @@ class RSSDiscordBot:
             }
             
             # 先获取RSS内容
-            response = requests.get(self.config['rss_url'], headers=headers, timeout=timeout)
+            response = requests.get(
+                self.config['rss_url'], 
+                headers=headers, 
+                timeout=timeout,
+                proxies=self.proxies
+            )
             response.raise_for_status()
             
             # 解析RSS
@@ -447,7 +494,11 @@ class RSSDiscordBot:
             if media_urls:
                 for i, media_url in enumerate(media_urls[:5]):  # 限制最多5个附件
                     try:
-                        media_response = requests.get(media_url, timeout=10)
+                        media_response = requests.get(
+                            media_url, 
+                            timeout=10,
+                            proxies=self.proxies
+                        )
                         if media_response.status_code == 200:
                             # 从URL获取文件扩展名
                             file_ext = media_url.split('.')[-1].split('?')[0]
@@ -473,10 +524,21 @@ class RSSDiscordBot:
                 # 发送消息
                 if current_files:
                     # 有附件时使用multipart/form-data
-                    response = requests.post(webhook_url, data=data, files=current_files, timeout=timeout)
+                    response = requests.post(
+                        webhook_url, 
+                        data=data, 
+                        files=current_files, 
+                        timeout=timeout,
+                        proxies=self.proxies
+                    )
                 else:
                     # 无附件时使用JSON
-                    response = requests.post(webhook_url, json=data, timeout=timeout)
+                    response = requests.post(
+                        webhook_url, 
+                        json=data, 
+                        timeout=timeout,
+                        proxies=self.proxies
+                    )
                 
                 if response.status_code == 204 or response.status_code == 200:
                     if i == 0:
@@ -593,6 +655,25 @@ class RSSDiscordBot:
             self.logger.info(f"关键词过滤已启用，过滤词汇: {', '.join(filter_keywords)}")
         else:
             self.logger.info("关键词过滤已禁用")
+        
+        # 显示代理状态信息
+        if self.proxies:
+            proxy_info = []
+            for protocol, url in self.proxies.items():
+                # 隐藏认证信息以保护隐私
+                display_url = url
+                if '@' in url:
+                    parts = url.split('@')
+                    if len(parts) == 2:
+                        scheme_auth = parts[0]
+                        host_part = parts[1]
+                        if '://' in scheme_auth:
+                            scheme = scheme_auth.split('://')[0]
+                            display_url = f"{scheme}://***:***@{host_part}"
+                proxy_info.append(f"{protocol.upper()}: {display_url}")
+            self.logger.info(f"网络代理已启用 - {', '.join(proxy_info)}")
+        else:
+            self.logger.info("网络代理已禁用")
         
         # 设置定时任务
         check_interval = self.config.get('check_interval', 600)

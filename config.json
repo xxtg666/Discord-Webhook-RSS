@@ -8,6 +8,16 @@
     "filter_keywords": [
         "开奖完成通知"
     ],
+    "proxy": {
+        "enabled": false,
+        "http": "http://127.0.0.1:8080",
+        "https": "https://127.0.0.1:8080",
+        "auth": {
+            "enabled": false,
+            "username": "",
+            "password": ""
+        }
+    },
     "url_shortener": {
         "enabled": true,
         "domain": "http://localhost:8080",
