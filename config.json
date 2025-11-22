@@ -1,6 +1,6 @@
 {
     "rss_url": "https://rss.ovh/telegram/channel/ZaihuaNews",
-    "discord_webhook_url": "https://discord.com/api/webhooks/1441773181089222666/53xxPvgMbvqnHxV_pEpM_AKmKx1uea8jHlMZFGgqGE3-VNQxYv4F23sO9A-7YiLH5NwA",
+    "discord_webhook_url": "https://discord.com/api/webhooks/...",
     "check_interval": 600,
     "log_level": "INFO",
     "max_retries": 3,
