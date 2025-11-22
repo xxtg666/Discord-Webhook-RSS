@@ -13,6 +13,8 @@ import string
 import threading
 import time
 import uuid
+import re
+import requests
 from http import cookies
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -234,11 +236,19 @@ class WebHandler(BaseHTTPRequestHandler):
     
     SESSIONS = {}  # 简单的内存Session存储
     
-    def __init__(self, *args, shortener=None, ai_handler=None, admin_password=None, **kwargs):
+    def __init__(self, *args, shortener=None, ai_handler=None, admin_password=None, webhook_url=None, proxies=None, **kwargs):
         self.shortener = shortener
         self.ai_handler = ai_handler
         self.admin_password = admin_password
+        self.webhook_url = webhook_url
+        self.proxies = proxies
         super().__init__(*args, **kwargs)
+    
+    def _clean_id(self, raw_id):
+        """清理ID，移除非字母数字字符"""
+        if not raw_id:
+            return ""
+        return re.sub(r'[^a-zA-Z0-9]', '', raw_id)
     
     def _send_html(self, content, status=200):
         self.send_response(status)
@@ -269,7 +279,7 @@ class WebHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_path.query)
         
         if path == 'feedback' or path == 'f':
-            item_id = query.get('id', [''])[0]
+            item_id = self._clean_id(query.get('id', [''])[0])
             item = self.shortener.get_cached_item(item_id)
             if item:
                 html = FEEDBACK_TEMPLATE.format(
@@ -333,7 +343,8 @@ class WebHandler(BaseHTTPRequestHandler):
             
         else:
             # 尝试作为短链接处理
-            long_url = self.shortener.get_long_url(path)
+            clean_path = self._clean_id(path)
+            long_url = self.shortener.get_long_url(clean_path)
             if long_url:
                 self._redirect(long_url)
             else:
@@ -362,10 +373,21 @@ class WebHandler(BaseHTTPRequestHandler):
         elif self.path == '/submit_feedback':
             # 表单提交
             data = parse_qs(post_data.decode('utf-8'))
-            item_id = data.get('id', [''])[0]
+            item_id = self._clean_id(data.get('id', [''])[0])
             item = self.shortener.get_cached_item(item_id)
             if item:
                 self.ai_handler.record_feedback(item)
+                
+                # 发送通知
+                if self.webhook_url:
+                    def send_notify():
+                        try:
+                            payload = {"content": f"🚫 已标记不感兴趣：{item.get('title', '无标题')}"}
+                            requests.post(self.webhook_url, json=payload, proxies=self.proxies, timeout=10)
+                        except Exception as e:
+                            logging.error(f"发送反馈通知失败: {e}")
+                    threading.Thread(target=send_notify).start()
+                    
                 self._send_html(SUCCESS_TEMPLATE)
             else:
                 self._send_html("<h1>Error: Item not found</h1>", 404)
@@ -431,12 +453,14 @@ class WebHandler(BaseHTTPRequestHandler):
 class URLShortenerServer:
     """短链接服务器"""
     
-    def __init__(self, host='localhost', port=8080, ai_handler=None, admin_password="admin"):
+    def __init__(self, host='localhost', port=8080, ai_handler=None, admin_password="admin", webhook_url=None, proxies=None):
         self.host = host
         self.port = port
         self.shortener = URLShortener()
         self.ai_handler = ai_handler
         self.admin_password = admin_password
+        self.webhook_url = webhook_url
+        self.proxies = proxies
         self.server = None
         self.server_thread = None
         
@@ -447,7 +471,7 @@ class URLShortenerServer:
         )
     
     def create_handler(self, *args, **kwargs):
-        return WebHandler(*args, shortener=self.shortener, ai_handler=self.ai_handler, admin_password=self.admin_password, **kwargs)
+        return WebHandler(*args, shortener=self.shortener, ai_handler=self.ai_handler, admin_password=self.admin_password, webhook_url=self.webhook_url, proxies=self.proxies, **kwargs)
     
     def start(self):
         try:

@@ -162,7 +162,9 @@ class RSSDiscordBot:
                     host, 
                     port, 
                     ai_handler=self.ai_handler,
-                    admin_password=admin_password
+                    admin_password=admin_password,
+                    webhook_url=self.config.get('discord_webhook_url'),
+                    proxies=self.proxies
                 )
                 
                 if self.url_shortener.start():
