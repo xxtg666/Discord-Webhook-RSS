@@ -19,6 +19,7 @@ import feedparser
 import requests
 import schedule
 from url_shortener import URLShortenerServer
+from ai_handler import AIHandler
 
 
 class RSSDiscordBot:
@@ -35,6 +36,9 @@ class RSSDiscordBot:
         self.sent_items_file = "sent_items.json"
         self.sent_items = self._load_sent_items()
         self._setup_logging()
+        
+        # 初始化 AI 处理器
+        self.ai_handler = AIHandler(config_file)
         
         # 设置代理
         self.proxies = self._setup_proxy()
@@ -146,13 +150,20 @@ class RSSDiscordBot:
     def _setup_url_shortener(self):
         """设置短链接服务器"""
         shortener_config = self.config.get('url_shortener', {})
+        web_config = self.config.get('web_config', {})
+        admin_password = web_config.get('admin_password', 'admin')
         
         if shortener_config.get('enabled', False):
             try:
                 host = shortener_config.get('host', 'localhost')
                 port = shortener_config.get('port', 8080)
                 
-                self.url_shortener = URLShortenerServer(host, port)
+                self.url_shortener = URLShortenerServer(
+                    host, 
+                    port, 
+                    ai_handler=self.ai_handler,
+                    admin_password=admin_password
+                )
                 
                 if self.url_shortener.start():
                     self.logger.info(f"短链接服务器启动成功: http://{host}:{port}")
@@ -400,6 +411,17 @@ class RSSDiscordBot:
         # 缩短消息中的所有链接
         message = self._shorten_urls_in_text(message)
         
+        # 添加反馈链接
+        if self.url_shortener:
+            try:
+                item_id = self.url_shortener.cache_item(item)
+                shortener_config = self.config.get('url_shortener', {})
+                domain = shortener_config.get('domain', 'http://localhost:8080').rstrip('/')
+                feedback_url = f"{domain}/feedback?id={item_id}"
+                message += f"\n\n[🚫 不感兴趣]({feedback_url})"
+            except Exception as e:
+                self.logger.error(f"生成反馈链接失败: {e}")
+        
         return {
             'content': message,
             'media_urls': media_urls
@@ -590,6 +612,16 @@ class RSSDiscordBot:
                 self.sent_items.add(item_id)
                 continue
             
+            # AI 审核
+            recommend, reason = self.ai_handler.check_article(
+                item.get('title', ''), 
+                item.get('summary', '') or item.get('description', '')
+            )
+            if not recommend:
+                self.logger.info(f"文章被 AI 拦截: {item.get('title', '无标题')} - 原因: {reason}")
+                self.sent_items.add(item_id)
+                continue
+            
             # 格式化消息
             message_data = self.format_message(item)
             
@@ -678,6 +710,9 @@ class RSSDiscordBot:
         # 设置定时任务
         check_interval = self.config.get('check_interval', 600)
         schedule.every(check_interval).seconds.do(self.check_and_send)
+        
+        # 设置 AI 规则优化任务 (每12小时)
+        schedule.every(12).hours.do(self.ai_handler.optimize_rules)
         
         # 立即执行一次检查
         self.check_and_send()

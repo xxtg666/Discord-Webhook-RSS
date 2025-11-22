@@ -18,6 +18,15 @@
             "password": ""
         }
     },
+    "ai_config": {
+        "enabled": false,
+        "api_key": "sk-xxxxxx",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4.1-mini"
+    },
+    "web_config": {
+        "admin_password": "admin"
+    },
     "url_shortener": {
         "enabled": true,
         "domain": "http://localhost:8080",

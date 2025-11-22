@@ -12,8 +12,7 @@
 - 🖼️ 支持图片和视频附件自动下载和发送
 - 🔗 内置短链接服务，自动缩短消息中的长链接
 - 🚫 避免重复推送已发送的内容
-- �️ 关键词过滤功能，可过滤包含指定关键词的内容
-- 🌐 支持HTTP/HTTPS代理，适用于网络受限环境
+- �️ 关键词过滤功能，可过滤包含指定关键词的内容- 🤖 **AI 反馈学习**：通过用户反馈自动学习偏好，智能拦截不感兴趣的内容- 🌐 支持HTTP/HTTPS代理，适用于网络受限环境
 - �📝 详细的日志记录和错误处理
 - ⚙️ 可配置的检查间隔和重试机制
 
@@ -57,6 +56,15 @@ pip install -r requirements.txt
             "password": ""
         }
     },
+    "ai_config": {
+        "enabled": true,
+        "api_key": "sk-xxxxxx",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-3.5-turbo"
+    },
+    "web_config": {
+        "admin_password": "admin"
+    },
     "url_shortener": {
         "enabled": true,
         "domain": "http://localhost:8080",
@@ -82,6 +90,13 @@ pip install -r requirements.txt
     - `enabled`: 是否启用代理认证
     - `username`: 代理用户名
     - `password`: 代理密码
+- `ai_config`: AI 审核配置
+  - `enabled`: 是否启用 AI 审核
+  - `api_key`: LLM API Key
+  - `base_url`: API 基础地址（支持 OpenAI 兼容接口）
+  - `model`: 模型名称
+- `web_config`: Web 管理界面配置
+  - `admin_password`: 管理员登录密码
 - `url_shortener`: 短链接服务配置
   - `enabled`: 是否启用短链接服务
   - `domain`: 短链接域名（可配置为公网域名）
@@ -167,6 +182,25 @@ pip install -r requirements.txt
     }
 }
 ```
+
+## AI 反馈学习功能
+
+本项目集成了 LLM（大语言模型）来实现智能内容过滤。
+
+### 工作原理
+
+1.  **AI 审核**：每篇新文章在发送前都会经过 AI 审核。AI 会根据当前的"过滤规则"判断文章是否应该推荐。
+2.  **用户反馈**：每条 Discord 消息末尾都会附带一个 `[🚫 不感兴趣]` 链接。
+3.  **反馈收集**：点击链接后，会跳转到确认页面。确认后，系统会记录这条反馈。
+4.  **规则优化**：系统每 12 小时会自动运行一次规则优化任务。AI 会分析收集到的反馈，总结出新的过滤规则（例如"拒绝加密货币推广"），并更新规则库。
+
+### Web 管理界面
+
+你可以通过 Web 界面管理 AI 过滤规则：
+
+- **登录地址**: `http://localhost:8080/admin/login`
+- **默认密码**: `admin` (可在 `config.json` 中修改)
+- **功能**: 查看当前规则、手动添加规则、删除规则
 
 ## 运行
 
