@@ -4,3 +4,7 @@ url_mappings.json
 .vscode/
 .venv/
 venv/
+ai_rules.json
+feedback_history.json
+item_cache.json
+pending_feedback.json

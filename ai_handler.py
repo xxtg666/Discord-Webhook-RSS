@@ -19,6 +19,7 @@ class AIHandler:
         self.config_file = config_file
         self.rules_file = "ai_rules.json"
         self.pending_feedback_file = "pending_feedback.json"
+        self.feedback_history_file = "feedback_history.json"
         self.logger = logging.getLogger('RSSDiscordBot')
         
         self.config = self._load_config()
@@ -54,14 +55,14 @@ class AIHandler:
         except Exception as e:
             self.logger.error(f"保存规则失败: {e}")
 
-    def _call_llm(self, messages: List[Dict], json_mode: bool = True) -> Optional[Dict]:
+    def _call_llm(self, messages: List[Dict], json_mode: bool = True, model_override: str = None) -> Optional[Dict]:
         """调用 LLM API"""
         if not self.config.get('enabled', False):
             return None
 
         api_key = self.config.get('api_key')
         base_url = self.config.get('base_url', 'https://api.openai.com/v1')
-        model = self.config.get('model', 'gpt-3.5-turbo')
+        model = model_override or self.config.get('model', 'gpt-3.5-turbo')
         
         if not api_key:
             self.logger.error("未配置 AI API Key")
@@ -146,16 +147,50 @@ class AIHandler:
 标题：{title}
 摘要：{summary}
 """
+        
+        audit_model = self.config.get('audit_model')
 
         result = self._call_llm([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
-        ])
+        ], model_override=audit_model)
 
         if result:
             return result.get('recommend', True), result.get('reason', '未知原因')
         
         return True, "AI调用失败，默认通过"
+
+    def preprocess_article(self, title: str, summary: str) -> str:
+        """
+        预处理文章（总结、翻译等）
+        Returns: 处理后的摘要
+        """
+        preprocessing_config = self.config.get('preprocessing', {})
+        if not self.config.get('enabled', False) or not preprocessing_config.get('enabled', False):
+            return summary
+
+        custom_prompt = preprocessing_config.get('prompt', '请总结这篇文章的内容。')
+        preprocessing_model = self.config.get('preprocessing_model')
+
+        system_prompt = f"""你是一个文章处理助手。请根据用户的要求处理文章内容。
+用户要求：{custom_prompt}
+
+请直接返回处理后的文本内容，不要包含 JSON 格式或其他无关内容。"""
+
+        user_prompt = f"""
+文章标题：{title}
+文章摘要：{summary}
+"""
+
+        result = self._call_llm([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ], json_mode=False, model_override=preprocessing_model)
+
+        if result:
+            return result.strip()
+        
+        return summary
 
     def record_feedback(self, article_data: Dict):
         """记录用户反馈（不感兴趣的文章）"""
@@ -184,6 +219,16 @@ class AIHandler:
         
         self.logger.info(f"已记录用户反馈: {article_data.get('title')}")
 
+    def get_pending_feedback(self) -> List[Dict]:
+        """获取待处理的反馈"""
+        if os.path.exists(self.pending_feedback_file):
+            try:
+                with open(self.pending_feedback_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                pass
+        return []
+
     def optimize_rules(self):
         """优化规则（每12小时运行）"""
         if not self.config.get('enabled', False):
@@ -201,23 +246,39 @@ class AIHandler:
             self.logger.info("没有新的反馈数据，跳过规则优化")
             return
 
+        # 加载历史反馈标题
+        history_titles = []
+        if os.path.exists(self.feedback_history_file):
+            try:
+                with open(self.feedback_history_file, 'r', encoding='utf-8') as f:
+                    history_titles = json.load(f)
+            except:
+                pass
+
         self.logger.info(f"开始分析 {len(pending)} 条新反馈并优化规则...")
 
         current_rules_text = "\n".join([f"- {r}" for i, r in enumerate(self.rules)]) if self.rules else "无"
         
+        # 构建历史标题列表文本
+        history_text = "\n".join([f"- {t}" for t in history_titles[-50:]]) # 只取最近50条历史，避免token过长
+        if not history_text:
+            history_text = "无"
+
+        # 构建本次详细反馈文本
         feedback_text = ""
         for i, item in enumerate(pending):
             feedback_text += f"{i+1}. 标题：{item['title']}\n   摘要：{item['summary']}\n"
 
-        system_prompt = """你是一个偏好分析专家。用户标记了一些文章为“不感兴趣”。
-你的任务是分析这些文章的共同特征，并结合当前已有的规则，生成一份更新后的过滤规则列表。
+        system_prompt = """你是一个专业的新闻内容偏好分析师。用户会提供一系列他标记为“不感兴趣”的新闻文章。
+你的任务是分析这些文章在**内容主题**上的共性，并生成一份过滤规则列表。
 
-要求：
-1. 规则应该具体且具有区分度（例如“拒绝加密货币推广”比“拒绝垃圾信息”更好）。
-2. 如果新反馈与现有规则相关，请保留或优化现有规则。
-3. 如果新反馈代表了新的厌恶类型，请添加新规则。
-4. 规则数量控制在 10-15 条以内，合并相似规则。
-5. 规则应该是描述“不喜欢的特征”，例如“包含博彩广告”。
+**核心原则**：
+1. **只关注内容主题**：规则必须描述用户不感兴趣的**话题、领域、事件类型**（例如：“拒绝加密货币行情”、“拒绝娱乐明星八卦”、“拒绝苹果公司产品发布传闻”）。
+2. **忽略形式与元数据**：**绝对不要**生成关于文章格式、排版、来源（如Telegram/Twitter）、表情符号、HTML标签、推广尾巴、链接形式等非内容属性的规则。即使这些文章有共同的格式特征，也请忽略，只关注它们讲了什么事情。
+3. **规则具体化**：避免笼统的“拒绝垃圾信息”，而要具体到“拒绝博彩广告”或“拒绝无实质内容的社交媒体动态”。
+4. **规则数量**：控制在 10-15 条以内，合并相似规则。
+
+请基于提供的“历史不感兴趣标题”和“近期不感兴趣文章详情（含摘要）”，更新当前的过滤规则。
 
 请以 JSON 格式回答：
 {
@@ -226,23 +287,28 @@ class AIHandler:
         "规则2",
         ...
     ],
-    "analysis": "简短的分析说明"
+    "analysis": "简短的分析说明，解释为什么生成这些规则"
 }"""
 
         user_prompt = f"""
 当前已有规则：
 {current_rules_text}
 
-用户新标记为“不感兴趣”的文章：
+历史标记为“不感兴趣”的文章标题（仅供参考共性）：
+{history_text}
+
+近期新标记为“不感兴趣”的文章详情（重点分析）：
 {feedback_text}
 
 请生成优化后的规则列表。
 """
+        
+        optimization_model = self.config.get('optimization_model')
 
         result = self._call_llm([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
-        ])
+        ], model_override=optimization_model)
 
         if result and 'rules' in result:
             new_rules = result['rules']
@@ -250,8 +316,18 @@ class AIHandler:
             self.logger.info(f"规则优化完成，当前规则数: {len(new_rules)}")
             self.logger.info(f"分析报告: {result.get('analysis', '无')}")
             
+            # 更新历史记录
+            new_titles = [item['title'] for item in pending]
+            # 去重合并
+            updated_history = list(set(history_titles + new_titles))
+            
+            try:
+                with open(self.feedback_history_file, 'w', encoding='utf-8') as f:
+                    json.dump(updated_history, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                self.logger.error(f"保存历史反馈失败: {e}")
+            
             # 清空已处理的反馈
-            # 也可以选择保留备份，这里直接清空
             with open(self.pending_feedback_file, 'w', encoding='utf-8') as f:
                 json.dump([], f)
         else:

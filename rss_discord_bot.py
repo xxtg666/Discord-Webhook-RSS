@@ -417,7 +417,8 @@ class RSSDiscordBot:
                 item_id = self.url_shortener.cache_item(item)
                 shortener_config = self.config.get('url_shortener', {})
                 domain = shortener_config.get('domain', 'http://localhost:8080').rstrip('/')
-                feedback_url = f"{domain}/feedback?id={item_id}"
+                # 使用更短的 /f 路径
+                feedback_url = f"{domain}/f?id={item_id}"
                 message += f"\n\n[🚫 不感兴趣]({feedback_url})"
             except Exception as e:
                 self.logger.error(f"生成反馈链接失败: {e}")
@@ -612,10 +613,25 @@ class RSSDiscordBot:
                 self.sent_items.add(item_id)
                 continue
             
+            # AI 预处理
+            original_summary = item.get('summary', '') or item.get('description', '')
+            processed_summary = self.ai_handler.preprocess_article(
+                item.get('title', ''), 
+                original_summary
+            )
+            
+            # 更新 item 中的 summary，以便后续使用
+            if 'summary' in item:
+                item['summary'] = processed_summary
+            elif 'description' in item:
+                item['description'] = processed_summary
+            else:
+                item['summary'] = processed_summary
+
             # AI 审核
             recommend, reason = self.ai_handler.check_article(
                 item.get('title', ''), 
-                item.get('summary', '') or item.get('description', '')
+                processed_summary
             )
             if not recommend:
                 self.logger.info(f"文章被 AI 拦截: {item.get('title', '无标题')} - 原因: {reason}")

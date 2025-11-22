@@ -1,6 +1,6 @@
 {
     "rss_url": "https://rss.ovh/telegram/channel/ZaihuaNews",
-    "discord_webhook_url": "YOUR_DISCORD_WEBHOOK_URL_HERE",
+    "discord_webhook_url": "https://discord.com/api/webhooks/1441773181089222666/53xxPvgMbvqnHxV_pEpM_AKmKx1uea8jHlMZFGgqGE3-VNQxYv4F23sO9A-7YiLH5NwA",
     "check_interval": 600,
     "log_level": "INFO",
     "max_retries": 3,
@@ -19,10 +19,17 @@
         }
     },
     "ai_config": {
-        "enabled": false,
-        "api_key": "sk-xxxxxx",
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-4.1-mini"
+        "enabled": true,
+        "api_key": "sk-",
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "gemini-3-pro-preview",
+        "audit_model": "deepseek/deepseek-v3.1-terminus",
+        "optimization_model": "gemini-3-pro-preview",
+        "preprocessing_model": "deepseek/deepseek-v3.1-terminus",
+        "preprocessing": {
+            "enabled": true,
+            "prompt": "1. **保留HTML格式**：输入包含HTML标签，输出必须严格保留这些标签（如<a>, <br>, <b>等），严禁转换为纯文本或Markdown。\n2. **移除干扰信息**：删除文末的频道推广标记（如'🍀[在花频道]'）和与正文弱关联的引用内容。\n3. **去重**：如果摘要内容与标题基本一致，返回空字符串。\n4. **纯净输出**：不要添加任何解释、前缀（如'处理后：'）。"
+        }
     },
     "web_config": {
         "admin_password": "admin"

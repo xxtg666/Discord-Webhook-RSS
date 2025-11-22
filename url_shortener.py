@@ -28,13 +28,13 @@ FEEDBACK_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>反馈确认</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h2 { margin-top: 0; }
-        .summary { color: #666; line-height: 1.6; }
-        .btn { display: inline-block; padding: 10px 20px; background-color: #d9534f; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; font-size: 16px; }
-        .btn:hover { background-color: #c9302c; }
-        .success { color: green; display: none; }
+        body {{ font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .card {{ border: 1px solid #ddd; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h2 {{ margin-top: 0; }}
+        .summary {{ color: #666; line-height: 1.6; }}
+        .btn {{ display: inline-block; padding: 10px 20px; background-color: #d9534f; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; font-size: 16px; }}
+        .btn:hover {{ background-color: #c9302c; }}
+        .success {{ color: green; display: none; }}
     </style>
 </head>
 <body>
@@ -61,8 +61,8 @@ SUCCESS_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>反馈成功</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center; }
-        h2 { color: green; }
+        body {{ font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center; }}
+        h2 {{ color: green; }}
     </style>
 </head>
 <body>
@@ -81,11 +81,11 @@ LOGIN_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理登录</title>
     <style>
-        body { font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 50px 20px; }
-        form { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        input { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
+        body {{ font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 50px 20px; }}
+        form {{ border: 1px solid #ddd; padding: 20px; border-radius: 8px; }}
+        input {{ width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }}
+        button {{ width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }}
+        button:hover {{ background-color: #0056b3; }}
     </style>
 </head>
 <body>
@@ -106,18 +106,26 @@ RULES_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>规则管理</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        ul { list-style-type: none; padding: 0; }
-        li { background: #f9f9f9; margin: 10px 0; padding: 15px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
-        .delete-btn { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
-        .add-form { margin-top: 20px; padding: 20px; background: #eee; border-radius: 4px; }
-        input[type="text"] { width: 70%; padding: 8px; }
-        .add-btn { background-color: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        body {{ font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        ul {{ list-style-type: none; padding: 0; }}
+        li {{ background: #f9f9f9; margin: 10px 0; padding: 15px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }}
+        .delete-btn {{ background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }}
+        .add-form {{ margin-top: 20px; padding: 20px; background: #eee; border-radius: 4px; }}
+        input[type="text"] {{ width: 70%; padding: 8px; }}
+        .add-btn {{ background-color: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }}
+        .optimize-btn {{ background-color: #17a2b8; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; margin-bottom: 20px; }}
+        .feedback-list {{ margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px; }}
+        .feedback-item {{ background: #fff3cd; margin: 5px 0; padding: 10px; border-radius: 4px; }}
     </style>
 </head>
 <body>
     <h2>AI 过滤规则管理</h2>
-    <p>当前共有 {count} 条规则</p>
+    
+    <form action="/admin/rules/optimize" method="post" style="margin-bottom: 20px;">
+        <button type="submit" class="optimize-btn">⚡ 立即根据反馈优化规则</button>
+    </form>
+
+    <h3>当前规则 ({count} 条)</h3>
     <ul>
         {rules_list}
     </ul>
@@ -129,6 +137,13 @@ RULES_TEMPLATE = """
             <button type="submit" class="add-btn">添加</button>
         </form>
     </div>
+
+    <div class="feedback-list">
+        <h3>待处理反馈 ({feedback_count} 条)</h3>
+        <p style="color: #666; font-size: 0.9em;">这些文章已被标记为"不感兴趣"，将在下次优化时被 AI 分析。</p>
+        {feedback_list}
+    </div>
+
     <p><a href="/admin/logout">退出登录</a></p>
 </body>
 </html>
@@ -185,15 +200,20 @@ class URLShortener:
     def cache_item(self, item_data):
         """缓存文章信息，返回ID"""
         with self.lock:
-            # 使用链接的MD5作为ID
-            import hashlib
-            link = item_data.get('link', '')
-            item_id = hashlib.md5(link.encode('utf-8')).hexdigest()
+            # 生成短ID (6位随机字符)
+            # 为了避免冲突，尝试生成直到唯一
+            for _ in range(10):
+                item_id = self.generate_short_code(length=6)
+                if item_id not in self.item_cache:
+                    break
+            else:
+                # 如果实在找不到（极低概率），回退到 UUID
+                item_id = uuid.uuid4().hex[:8]
             
             self.item_cache[item_id] = {
                 'title': item_data.get('title', ''),
                 'summary': item_data.get('summary', ''),
-                'link': link,
+                'link': item_data.get('link', ''),
                 'timestamp': time.time()
             }
             
@@ -248,13 +268,13 @@ class WebHandler(BaseHTTPRequestHandler):
         path = parsed_path.path.strip('/')
         query = parse_qs(parsed_path.query)
         
-        if path == 'feedback':
+        if path == 'feedback' or path == 'f':
             item_id = query.get('id', [''])[0]
             item = self.shortener.get_cached_item(item_id)
             if item:
                 html = FEEDBACK_TEMPLATE.format(
                     title=item['title'],
-                    summary=item['summary'][:200] + '...',
+                    summary=item['summary'] + '...',
                     id=item_id
                 )
                 self._send_html(html)
@@ -286,7 +306,26 @@ class WebHandler(BaseHTTPRequestHandler):
                 </li>
                 """
             
-            html = RULES_TEMPLATE.format(count=len(rules), rules_list=rules_html)
+            # 获取待处理反馈
+            pending_feedback = self.ai_handler.get_pending_feedback()
+            feedback_html = ""
+            if pending_feedback:
+                for item in pending_feedback:
+                    feedback_html += f"""
+                    <div class="feedback-item">
+                        <strong>{item.get('title', '无标题')}</strong><br>
+                        <span style="font-size: 0.8em; color: #666;">{item.get('link', '')}</span>
+                    </div>
+                    """
+            else:
+                feedback_html = "<p>暂无待处理反馈</p>"
+            
+            html = RULES_TEMPLATE.format(
+                count=len(rules), 
+                rules_list=rules_html,
+                feedback_count=len(pending_feedback),
+                feedback_list=feedback_html
+            )
             self._send_html(html)
             
         elif not path:
@@ -369,6 +408,17 @@ class WebHandler(BaseHTTPRequestHandler):
                     self.ai_handler.save_rules(self.ai_handler.rules)
             except:
                 pass
+            self._redirect('/admin/rules')
+            
+        elif self.path == '/admin/rules/optimize':
+            if not self._check_auth():
+                self._redirect('/admin/login')
+                return
+            # 触发规则优化
+            threading.Thread(target=self.ai_handler.optimize_rules).start()
+            # 稍微等待一下，或者直接重定向，让用户刷新查看结果
+            # 这里直接重定向，优化是异步的，可能还没完成，但UI会显示正在处理（如果加状态的话）
+            # 简单起见，直接重定向
             self._redirect('/admin/rules')
             
         else:
