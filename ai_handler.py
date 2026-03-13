@@ -172,7 +172,7 @@ class AIHandler:
         custom_prompt = preprocessing_config.get('prompt', '请总结这篇文章的内容。')
         preprocessing_model = self.config.get('preprocessing_model')
 
-        system_prompt = f"""你是一个文章处理助手。请根据用户的要求处理文章内容。
+        system_prompt = f"""你是一个文章处理助手。输入内容为 Markdown 格式，请以 Markdown 格式输出处理结果。
 用户要求：{custom_prompt}
 
 请直接返回处理后的文本内容，不要包含 JSON 格式或其他无关内容。"""

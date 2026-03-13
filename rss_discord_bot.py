@@ -331,9 +331,21 @@ class RSSDiscordBot:
         content = content.strip()
         
         return content
-    
 
-    
+    def _strip_telegram_promo(self, text: str) -> str:
+        """移除文末Telegram频道推广签名块
+
+        只移除末尾连续的 emoji+t.me链接 组成的推广块，如：
+        🍀[在花频道](http://t.me/ZaiHuaPd)
+        🍵[茶馆聊天](http://t.me/zaihuachat)
+        📮[投稿](http://t.me/ZaiHuabot)
+
+        正文中引用的t.me链接不受影响。
+        """
+        # 只匹配末尾的连续 emoji+t.me 链接块（锚定到文本结尾）
+        text = re.sub(r'(?:\s*.?\[[^\]]*\]\(https?://t\.me/[^\)]*\))+\s*$', '', text)
+        return text.strip()
+
     def fetch_rss_feed(self) -> Optional[List[Dict]]:
         """获取RSS源内容
         
@@ -377,38 +389,21 @@ class RSSDiscordBot:
             self.logger.error(f"获取RSS源失败: {e}")
             return None
     
-    def format_message(self, item: Dict) -> Dict:
+    def format_message(self, item: Dict, processed_summary: str, media_urls: List[str]) -> Dict:
         """格式化Discord消息
-        
+
         Args:
-            item: RSS文章项目
-            
+            item: RSS文章项目（用于title, link和feedback缓存）
+            processed_summary: 已经过AI预处理的Markdown文本
+            media_urls: 从原始HTML中预提取的媒体URL列表
+
         Returns:
             包含消息文本和媒体文件的字典
         """
-        title = item.get('title', '无标题')
-        link = item.get('link', '')
-        
-        # 获取摘要或描述
-        summary = ''
-        if 'summary' in item:
-            summary = item.summary
-        elif 'description' in item:
-            summary = item.description
-        
-        # 提取媒体文件
-        media_urls = []
-        if summary:
-            media_urls = self._extract_media_urls(summary)
-        
-        # 转换HTML为Markdown
-        if summary:
-            summary = self._html_to_markdown(summary)
-        
         # 格式化消息
         message = f"📰 "
-        if summary:
-            message += summary
+        if processed_summary:
+            message += processed_summary
         
         # 缩短消息中的所有链接
         message = self._shorten_urls_in_text(message)
@@ -615,33 +610,32 @@ class RSSDiscordBot:
                 self.sent_items.add(item_id)
                 continue
             
-            # AI 预处理
-            original_summary = item.get('summary', '') or item.get('description', '')
-            processed_summary = self.ai_handler.preprocess_article(
-                item.get('title', ''), 
-                original_summary
-            )
-            
-            # 更新 item 中的 summary，以便后续使用
-            if 'summary' in item:
-                item['summary'] = processed_summary
-            elif 'description' in item:
-                item['description'] = processed_summary
-            else:
-                item['summary'] = processed_summary
+            # Step 1: 从原始HTML提取媒体URL（在任何处理之前）
+            raw_summary = item.get('summary', '') or item.get('description', '')
+            media_urls = self._extract_media_urls(raw_summary) if raw_summary else []
 
-            # AI 审核
+            # Step 2: HTML → Markdown，并移除Telegram推广链接
+            markdown_summary = self._html_to_markdown(raw_summary) if raw_summary else ''
+            markdown_summary = self._strip_telegram_promo(markdown_summary) if markdown_summary else ''
+
+            # Step 3: AI 预处理（输入为Markdown）
+            processed_summary = self.ai_handler.preprocess_article(
+                item.get('title', ''),
+                markdown_summary
+            )
+
+            # Step 4: AI 审核（输入为Markdown）
             recommend, reason = self.ai_handler.check_article(
-                item.get('title', ''), 
+                item.get('title', ''),
                 processed_summary
             )
             if not recommend:
                 self.logger.info(f"文章被 AI 拦截: {item.get('title', '无标题')} - 原因: {reason}")
                 self.sent_items.add(item_id)
                 continue
-            
-            # 格式化消息
-            message_data = self.format_message(item)
+
+            # Step 5: 格式化消息（传入已处理的数据）
+            message_data = self.format_message(item, processed_summary, media_urls)
             
             # 尝试发送消息
             success = False
