@@ -15,12 +15,13 @@ from typing import Dict, List, Optional, Tuple
 class AIHandler:
     """AI 处理器"""
     
-    def __init__(self, config_file: str = "config.json"):
+    def __init__(self, config_file: str = "config.json", proxies: Optional[Dict] = None):
         self.config_file = config_file
         self.rules_file = "ai_rules.json"
         self.pending_feedback_file = "pending_feedback.json"
         self.feedback_history_file = "feedback_history.json"
         self.logger = logging.getLogger('RSSDiscordBot')
+        self.proxies = proxies or {}
         
         self.config = self._load_config()
         self.rules = self._load_rules()
@@ -82,37 +83,37 @@ class AIHandler:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        try:
-            # 获取代理配置
-            # 这里我们需要重新读取主配置文件来获取代理设置，或者让 RSSDiscordBot 传递进来
-            # 为了简单，这里先尝试读取主配置文件中的代理
-            proxies = {}
-            try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    full_config = json.load(f)
-                    proxy_config = full_config.get('proxy', {})
-                    if proxy_config.get('enabled', False):
-                        if proxy_config.get('http'): proxies['http'] = proxy_config['http']
-                        if proxy_config.get('https'): proxies['https'] = proxy_config['https']
-                        # 处理认证... (简化处理，假设 URL 已包含认证或无认证)
-            except:
-                pass
+        return self._post_llm_request(base_url, headers, payload, json_mode)
 
+    def _post_llm_request(self, base_url: str, headers: Dict, payload: Dict, json_mode: bool):
+        try:
             response = requests.post(
                 f"{base_url.rstrip('/')}/chat/completions",
                 headers=headers,
                 json=payload,
-                proxies=proxies,
+                proxies=self.proxies,
                 timeout=60
             )
+
+            if response.status_code == 400 and payload.get("response_format"):
+                self.logger.warning("当前 AI 接口不支持 response_format，正在不使用 JSON 强制模式重试")
+                retry_payload = dict(payload)
+                retry_payload.pop("response_format", None)
+                return self._post_llm_request(base_url, headers, retry_payload, json_mode)
+
             response.raise_for_status()
             result = response.json()
             content = result['choices'][0]['message']['content']
-            
+
             if json_mode:
                 return json.loads(content)
             return content
-            
+
+        except requests.HTTPError as e:
+            response = e.response
+            detail = response.text if response is not None else str(e)
+            self.logger.error(f"调用 LLM 失败: HTTP {response.status_code if response is not None else 'unknown'} - {detail}")
+            return None
         except Exception as e:
             self.logger.error(f"调用 LLM 失败: {e}")
             return None
@@ -160,34 +161,77 @@ class AIHandler:
         
         return True, "AI调用失败，默认通过"
 
-    def preprocess_article(self, title: str, summary: str) -> str:
-        """
-        预处理文章（总结、翻译等）
-        Returns: 处理后的摘要
-        """
+    def preprocess_article(
+        self,
+        title: str,
+        summary: str,
+        recent_articles: Optional[List[Dict]] = None,
+        raw_html: str = "",
+        link: str = "",
+    ) -> str:
+        """Clean and normalize one RSS article before audit and delivery."""
         preprocessing_config = self.config.get('preprocessing', {})
         if not self.config.get('enabled', False) or not preprocessing_config.get('enabled', False):
             return summary
 
-        custom_prompt = preprocessing_config.get('prompt', '请总结这篇文章的内容。')
         preprocessing_model = self.config.get('preprocessing_model')
+        recent_articles = recent_articles or []
 
-        system_prompt = f"""你是一个文章处理助手。输入内容为 Markdown 格式，请以 Markdown 格式输出处理结果。
-用户要求：{custom_prompt}
+        system_prompt = """你是一个 RSSHub Telegram 文章的最小编辑器。你只能做两件事：
+1. 删除频道推广、投稿入口、讨论群、订阅入口等非正文推广标记。
+2. 将前文引用块压缩成“前文摘要：...”。
 
-请直接返回处理后的文本内容，不要包含 JSON 格式或其他无关内容。"""
+硬性限制：
+1. 禁止总结、润色、翻译、改写、补充、删减或重排当前文章正文。
+2. 禁止改变当前文章正文里的事实、数字、措辞、链接文本、来源链接、Markdown 强调或代码格式。
+3. 对于不是推广、也不是前文引用的内容，必须逐字保留，包含原标点、换行和链接。
+4. recent_pushed_articles 只能用于识别和生成前文摘要，绝不能作为新内容追加到正文。
 
-        user_prompt = f"""
-文章标题：{title}
-文章摘要：{summary}
-"""
+推广处理：
+- 删除频道推广、投稿入口、交流群、订阅提示、无意义签名、重复的 t.me 频道链接等非正文内容。
+- RSSHub Telegram 常见的“在花频道 · 茶馆讨论 · 投稿通道”属于推广块，必须删除。
+- 正文来源链接如 WIRED、AP News、工信部、OpenAI Developers、民航茶话等必须保留，不能当作推广删除。
+
+引用处理：
+- current_article.body_markdown 可能包含 [前文引用]...[/前文引用]。
+- current_article.raw_html 可能包含 <div class="rsshub-quote"><blockquote>...</blockquote></div>。
+- 标题可能以 ↩️ 开头。
+- 这些都表示当前文章回复或引用了前面推送过的文章。
+- 不要保留被引用的全文。
+- 优先用引用块中的 t.me 链接、标题和语义，在 recent_pushed_articles 中匹配已推送文章。
+- 如果能匹配，用 recent_pushed_articles 中的 summary 生成 1 句“前文摘要：...”。
+- 如果不能匹配，但引用块自带文本，也只根据引用块生成 1 句“前文摘要：...”。
+- 前文摘要必须短，不能替代当前文章正文。
+
+最终输出：
+- 直接输出处理后的 Markdown 正文，不要输出 JSON、解释、前缀、代码块或字段名。
+- 输出不能包含 [前文引用]、[/前文引用]、HTML 标签、频道推广块或未压缩的被引用全文。
+- 输出中除“删除推广”和“引用块替换为前文摘要”之外，其余当前文章正文必须与输入一致。"""
+
+        user_payload = {
+            "task": "remove_promotions_and_summarize_quotes_only",
+            "current_article": {
+                "title": title,
+                "link": link,
+                "body_markdown": summary,
+                "raw_html": raw_html,
+            },
+            "recent_pushed_articles": [
+                {
+                    "title": article.get("title", ""),
+                    "link": article.get("link", ""),
+                    "summary": article.get("summary", ""),
+                }
+                for article in recent_articles[-12:]
+            ],
+        }
 
         result = self._call_llm([
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
         ], json_mode=False, model_override=preprocessing_model)
 
-        if result:
+        if isinstance(result, str):
             return result.strip()
         
         return summary

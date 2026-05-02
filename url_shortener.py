@@ -15,6 +15,7 @@ import time
 import uuid
 import re
 import requests
+from html import escape
 from http import cookies
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -283,8 +284,8 @@ class WebHandler(BaseHTTPRequestHandler):
             item = self.shortener.get_cached_item(item_id)
             if item:
                 html = FEEDBACK_TEMPLATE.format(
-                    title=item['title'],
-                    summary=item['summary'] + '...',
+                    title=escape(item['title']),
+                    summary=escape(item['summary'] + '...'),
                     id=item_id
                 )
                 self._send_html(html)
@@ -306,9 +307,10 @@ class WebHandler(BaseHTTPRequestHandler):
             rules = self.ai_handler.rules
             rules_html = ""
             for i, rule in enumerate(rules):
+                escaped_rule = escape(rule)
                 rules_html += f"""
                 <li>
-                    <span>{i+1}. {rule}</span>
+                    <span>{i+1}. {escaped_rule}</span>
                     <form action="/admin/rules/delete" method="post" style="display:inline; margin:0;">
                         <input type="hidden" name="index" value="{i}">
                         <button type="submit" class="delete-btn">删除</button>
@@ -321,10 +323,12 @@ class WebHandler(BaseHTTPRequestHandler):
             feedback_html = ""
             if pending_feedback:
                 for item in pending_feedback:
+                    title = escape(item.get('title', '无标题'))
+                    link = escape(item.get('link', ''))
                     feedback_html += f"""
                     <div class="feedback-item">
-                        <strong>{item.get('title', '无标题')}</strong><br>
-                        <span style="font-size: 0.8em; color: #666;">{item.get('link', '')}</span>
+                        <strong>{title}</strong><br>
+                        <span style="font-size: 0.8em; color: #666;">{link}</span>
                     </div>
                     """
             else:
